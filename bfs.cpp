@@ -14,7 +14,8 @@
 #include <stdlib.h>
 #include <math.h>
 #include <iostream>
-
+#include "metamorph.h"
+#include "metacl_module.h"
 struct Node
 {
 	int starting;
@@ -40,11 +41,14 @@ void run_bfs_gpu(int no_of_nodes, Node *h_graph_nodes, int edge_list_size,
     	size_t deviceBufferSize = -1;
 	const char* fileName="bfs.cl";
 	cl_mem memObjects[8] = {0,0,0,0,0,0,0,0};
+        meta_set_acc(-1, metaModePreferOpenCL); //Must be set to OpenCL, don't need a device since we will override
+    	meta_get_state_OpenCL(&firstPlatformId, &device, &context, &commandQueue);
+	meta_register_module(&meta_gen_opencl_metacl_module_registry);
 
     // First, select an OpenCL platform to run on.  For this example, we
     // simply choose the first available platform.  Normally, you would
     // query for all available platforms and select the most appropriate one.
-    
+        /*
 	clGetPlatformIDs(1, &firstPlatformId, &numPlatforms);
 	
     	cl_context_properties contextProperties[] =
@@ -116,7 +120,7 @@ void run_bfs_gpu(int no_of_nodes, Node *h_graph_nodes, int edge_list_size,
 	//clFinish(commandQueue);
 	clBuildProgram(program, 0, NULL, NULL, NULL, NULL);
 	//clFinish(commandQueue);
-    
+    	*/
 	
 	int h_over=1;
 	//printf("seg fault occurs here 11.1\n");
@@ -128,7 +132,7 @@ void run_bfs_gpu(int no_of_nodes, Node *h_graph_nodes, int edge_list_size,
 	memObjects[5] = clCreateBuffer(context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR, sizeof(int) * no_of_nodes, h_cost_ref, NULL);
 	memObjects[6] = clCreateBuffer(context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR, sizeof(int) , &h_over, NULL);
 	memObjects[7] = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, sizeof(int), &no_of_nodes, NULL);
-	
+	clFinish(commandQueue);
 	clEnqueueWriteBuffer(commandQueue, memObjects[0], CL_TRUE, 0, sizeof(Node) * no_of_nodes, h_graph_nodes, 0, NULL, NULL);
 	clFinish(commandQueue);
 	clEnqueueWriteBuffer(commandQueue, memObjects[1], CL_TRUE, 0, sizeof(int) * edge_list_size, h_graph_edges, 0, NULL, NULL);
@@ -142,7 +146,8 @@ void run_bfs_gpu(int no_of_nodes, Node *h_graph_nodes, int edge_list_size,
 	clFinish(commandQueue);
 	std:: cerr << "error code enqueuebuffer"<< errNum <<"\n";
 	
-        kernel1 = clCreateKernel(program, "kernel1", NULL);
+	/*        
+	kernel1 = clCreateKernel(program, "kernel1", NULL);
 	
 
 	kernel2 = clCreateKernel(program, "kernel2", NULL);
@@ -160,19 +165,22 @@ void run_bfs_gpu(int no_of_nodes, Node *h_graph_nodes, int edge_list_size,
 	errNum |= clSetKernelArg(kernel2, 2, sizeof(cl_mem), &memObjects[4]);
 	errNum |= clSetKernelArg(kernel2, 3, sizeof(cl_mem), &memObjects[6]);
 	errNum |= clSetKernelArg(kernel2, 4, sizeof(cl_mem), &memObjects[7]);
-	
+	*/
 	size_t maxThreads[3];
 	errNum = clGetDeviceInfo(device,CL_DEVICE_MAX_WORK_ITEM_SIZES,sizeof(size_t)*3,&maxThreads, NULL);
-	
 
 	maxThreads[0] = no_of_nodes < 256? no_of_nodes: 256; //maxThreads[0];
 
-	size_t globalWorkSize[1] = {(no_of_nodes/maxThreads[0])*maxThreads[0] + ((no_of_nodes%maxThreads[0])==0?0:maxThreads[0])}; // one dimensional Range
+	//size_t globalWorkSize[3] = {(no_of_nodes/maxThreads[0])*maxThreads[0] + ((no_of_nodes%maxThreads[0])==0?0:maxThreads[0])}; // one dimensional Range
 
-	size_t localWorkSize[1] = {maxThreads[0]};
+	//size_t localWorkSize[3] = {maxThreads[0]};
+        a_dim3 globalWorkSize = {(no_of_nodes/maxThreads[0])*maxThreads[0] + ((no_of_nodes%maxThreads[0])==0?0:maxThreads[0]),0,0}; // one dimensional Range
+
+	a_dim3 localWorkSize = {maxThreads[0],0,0};
 
 	int stop=1;
 	int k=0;
+	int it=0;
 	std::vector<double>tval;
 	
 	cl_event event1,event2,event3,event4;
@@ -185,16 +193,26 @@ void run_bfs_gpu(int no_of_nodes, Node *h_graph_nodes, int edge_list_size,
 	clEnqueueWriteBuffer(commandQueue, memObjects[6], CL_TRUE, 0, sizeof(int), (void*)&stop, 0, NULL, NULL);
 	clFinish(commandQueue);
 	
-	errNum=clEnqueueNDRangeKernel(commandQueue, kernel1, 1, NULL,globalWorkSize, localWorkSize,0, NULL,NULL);
-	errNum=clEnqueueNDRangeKernel(commandQueue, kernel2, 1, NULL,globalWorkSize, localWorkSize,0, NULL, NULL);
+	//errNum=clEnqueueNDRangeKernel(commandQueue, kernel1, 1, NULL,globalWorkSize, localWorkSize,0, NULL,NULL);
+        //clFinish(commandQueue);
+	//errNum=clEnqueueNDRangeKernel(commandQueue, kernel2, 1, NULL,globalWorkSize, localWorkSize,0, NULL, NULL);
+	//clFinish(commandQueue);
 	
+        errNum=meta_gen_opencl_bfs_kernel1(commandQueue, &globalWorkSize, &localWorkSize, &memObjects[0], &memObjects[1], &memObjects[2], &memObjects[3], &memObjects[4],&memObjects[5], &memObjects[7], 1, &event1 ) ;
+	clWaitForEvents(1, &event1);
+	
+
+	errNum=meta_gen_opencl_bfs_kernel2(commandQueue, &globalWorkSize, &localWorkSize, &memObjects[2], &memObjects[3], &memObjects[4], &memObjects[6], &memObjects[7], 1, &event2) ;
+	clWaitForEvents(1, &event2);
 	clFinish(commandQueue);
-	clEnqueueReadBuffer(commandQueue, memObjects[6], CL_TRUE,0,sizeof(int), (void*)&stop,0, NULL, NULL);
+
+
+ 	clEnqueueReadBuffer(commandQueue, memObjects[6], CL_TRUE,0,sizeof(int), (void*)&stop,0, NULL, NULL);
 	clFinish(commandQueue);
-	k++;
+	it++;
         }
-	printf (" total iterations : %d\n ",k);
 	
+	printf (" total iterations : %d\n ",it);
 	clEnqueueReadBuffer(commandQueue, memObjects[5], CL_TRUE,0, no_of_nodes * sizeof(int), (void*)h_cost_ref,0, NULL, NULL);
     	//Free memory memory
 	
@@ -209,12 +227,15 @@ void run_bfs_gpu(int no_of_nodes, Node *h_graph_nodes, int edge_list_size,
 	clReleaseMemObject(memObjects[5]);
 	clReleaseMemObject(memObjects[6]);
 	clReleaseMemObject(memObjects[7]);
+	meta_deregister_module(&meta_gen_opencl_metacl_module_registry);
+	/*        
 	clReleaseKernel(kernel1);
 	clReleaseKernel(kernel2);
 	clReleaseProgram(program);
 	clReleaseContext(context);
 	clReleaseCommandQueue(commandQueue);
-	
+	*/
+
 }
 
 

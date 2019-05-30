@@ -1,9 +1,10 @@
 # BFS_MetaCL
 Description
 
-Ported Breadth First Search from https://github.com/pathscale/rodinia/tree/master/opencl/bfs using MetaCL
+Ported Breadth First Search from https://github.com/pathscale/rodinia/tree/master/opencl/bfs using MetaCL. 
+Sample graphs generated using Rodinia Graph Generator.
 
-MetaCL and MetaMorph:
+# MetaCL and MetaMorph:
 
 MetaMorph (https://github.com/vtsynergy/MetaMorph) is a framework designed to effectively utilize HPC systems that consist of multiple heterogeneous nodes with different hardware accelerators. It acts as middleware between the application code and compute devices, such as CPUs, GPUs, Intel MIC and FPGAs. MetaMorph hides the complexity of developing code for and executing on heterogeneous platform by acting as a unified “meta-platform.” Metamorph is developed by the Synergy Laboratory @ Virginia Tech (http://synergy.cs.vt.edu/)
 
